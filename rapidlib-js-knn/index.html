@@ -1,0 +1,170 @@
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>RapidLib_005</title>
+  <link rel="stylesheet" type="text/css" href="https://www.doc.gold.ac.uk/eavi/rapidmixapi.com/rapidmixapi.css">
+  <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Lato" />
+</head>
+
+<body>
+  <h2>Video classification&nbsp;&nbsp;<button onclick="turnOn()" type="button">toggle sound</button></h2>
+  <h3>Click on the video, then press a number key to record examples of that class.</h3>
+  <canvas id="output-canvas"></canvas>
+  <p>classifying at this resolution: <br><canvas id="small-canvas"></canvas>
+    <video width="1" autoplay></video></p>
+</body>
+<script src="rapidlib.js"></script>
+<script>
+  ///////////////////// Web Audio API
+
+  // create web audio api context
+  var audioConstructor = window.AudioContext || window.webkitAudioContex;
+  var audioCtx = new audioConstructor();
+
+  // create Oscillator node
+  var oscillator = audioCtx.createOscillator();
+  oscillator.type = 'square';
+  oscillator.frequency.value = 220; // value in hertz
+  oscillator.start();
+
+  // create a gain node and connect
+  var gainNode = audioCtx.createGain();
+  gainNode.gain.value = 0.0;
+  oscillator.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  //control the gain with the button
+  function turnOn() {
+    if (gainNode.gain.value === 0.0) {
+      gainNode.gain.value = 1.0;
+    } else {
+      gainNode.gain.value = 0.0;
+    }
+  }
+
+  //////////////////////////////////// RapidLib
+
+  var rapidLib = window.RapidLib();
+  var kNN = new rapidLib.Classification();
+  var myTrainingSet = [];
+
+  var trained = false;
+
+  function trainMe() {
+    console.log('classification trained: ', kNN.train(myTrainingSet));
+    console.log(myTrainingSet);
+    trained = true;
+  }
+
+  var classOutput = 0;
+  var knnOutput = 0;
+  var recordingTrigger = false;
+  var recordingCounter = 0;
+
+  /////////////////////////////////// Controls
+
+  window.addEventListener('keydown', this.check, false);
+
+  function check(e) {
+    if (e.keyCode >= 48 && e.keyCode < 58) {
+      classOutput = e.keyCode - 48;
+      recordingTrigger = true;
+    }
+  }
+
+  ///////////////////////////////////// convet to greyscale
+
+  function convertToLightness(imageData) {
+    var data = imageData.data;
+    var lightness = [];
+    for (var i = 0; i < data.length; i += 4) {
+      var index = i * 0.25;
+      lightness[index] = data[i] + data[i + 1] + data[i + 2];
+    }
+    return lightness;
+  }
+
+  ///////////////////////////////////// Drawing
+
+  var video = document.querySelector('video');
+  var canvas = document.getElementById('small-canvas');
+  var outCanvas = document.getElementById('output-canvas');
+  canvas.width = 32;
+  canvas.height = 24;
+  outCanvas.width = 640;
+  outCanvas.height = 480;
+
+  var context = canvas.getContext('2d');
+  var outContext = outCanvas.getContext('2d');
+
+  function draw() {
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    outContext.drawImage(video, 0, 0, outCanvas.width, outCanvas.height);
+
+    var lightnessImage = convertToLightness(context.getImageData(0, 0, canvas.width, canvas.height));
+
+    if (trained === true) {
+      outContext.font = "24px Lato";
+      knnOutput = kNN.run(lightnessImage)[0];
+      oscillator.frequency.value = 220 + (knnOutput * 220);
+      for (var x = 0; x < 32; ++x) {
+        for (var y = 0; y < 24; ++y) {
+          var index = x + (y * 32);
+          var brightness = lightnessImage[index] / 765;
+          outContext.fillStyle = 'rgba(255, 255, 255, ' + brightness + ')';
+          outContext.fillText(knnOutput, (x * 20.1), (y * 20.8));
+        }
+      }
+
+    }
+
+    outContext.font = "48px Lato";
+    outContext.fillStyle = "#FF9d75";
+    if (recordingTrigger) {
+      outContext.clearRect(110, 210, 455, 50);
+      outContext.fillText("recording class " + classOutput + " (" + recordingCounter + ")", 120, 250);
+    }
+
+    if (recordingTrigger) {
+      if (++recordingCounter > 50) {
+        recordingTrigger = false;
+        trainMe();
+        recordingCounter = 0;
+      } else {
+        myTrainingSet.push({
+          input: lightnessImage,
+          output: [classOutput]
+        });
+      }
+    }
+    window.requestAnimationFrame(draw);
+  }
+  window.requestAnimationFrame(draw);
+
+  //////////////////////////////////////// Video capture
+
+  var constraints = {
+    audio: false,
+    video: true
+  };
+
+  function handleSuccess(stream) {
+    window.stream = stream; // make stream available to browser console
+    video.srcObject = stream;
+  }
+
+  function handleError(error) {
+    console.log('navigator.getUserMedia error: ', error);
+  }
+
+  var getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+
+  if (!getUserMedia) {
+    alert("getUserMedia not supported by this browser.");
+  }
+  navigator.mediaDevices.getUserMedia(constraints).
+  then(handleSuccess).catch(handleError);
+</script>
+
+</html>

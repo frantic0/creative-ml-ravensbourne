@@ -1,0 +1,6 @@
+[submodule "learner-js-mappings/learnerjs"]
+	path = learner-js-mappings/learnerjs
+	url = git@github.com:Louismac/learnerjs.git
+[submodule "learnerjs"]
+	path = learnerjs
+	url = git@github.com:Louismac/learnerjs.git

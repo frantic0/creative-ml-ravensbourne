@@ -1,0 +1,325 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+  <script src="./maxiLib.js">
+  </script>
+  <meta charset="utf-8">
+  <title>Creative ML Ravensbourne</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" />
+  <link rel='stylesheet' href='https://fonts.googleapis.com/css?family=Staatliches' />
+</head>
+
+<style type="text/css">
+  body {
+    font-family: 'Lato';
+    font-size: 16px;
+    color: white;
+    text-align: center;
+    background-color: #8B6DE8;
+  }
+
+  button {
+    background-color: transparent;
+    color: white;
+    border: solid white 5px;
+    width: 150px;
+    padding: 10px;
+    margin: 10px;
+  }
+
+  button:hover {
+    background-color: transparent;
+    color: #FFD12C;
+    border: solid #FFD12C 5px;
+  }
+
+  .controls {
+    width: 100%;
+    margin: auto;
+    height: 205px;
+  }
+
+  span, h2 {
+    font-family: 'Staatliches';
+    font-size: 22px;
+    color: white;
+    text-align: center;
+  }
+
+  span, h3 {
+    font-family: 'Staatliches';
+    font-size: 22px;
+    color: white;
+    text-align: center;
+  }
+
+  #param-table {
+    margin-top: 20px;
+    margin-left: auto;
+    margin-right: auto;
+    /* margin-left: 150px; */
+  }
+
+  td {
+    padding: 15px;
+  }
+
+  .pad {
+    z-index: -20;
+    /* background-color: rgba(0, 255, 200, 0.2);   */
+    background: repeating-linear-gradient(
+      135deg,
+      #606dbc,
+      #606dbc 10px,
+      #8B6DE8 10px,
+      #8B6DE8 20px
+    );
+    margin: 10px;
+  }
+
+  
+  .output {
+
+    font-size: 2em;
+  }
+</style>
+
+<body>
+  <h2>neural network + PWM synthesis</h2>
+  <div>
+    <p><strong>RapidLib.js + Maximilian.js </strong></p>
+    <p>Train a Neural Network model to map mouse positions (x,y) to four synthesis parameters values (F, D, CF, R).</p>
+    <p>Click mouse down and drag on the pad (below) to record a stream of mouse position examples into training data set.</p>
+    <p>Press "t" to train the model, "r" to run the model with current mouse positions, and "x" to reset the model.</p>
+  </div>
+  <div>
+    <canvas class="pad"></canvas>
+  </div>
+  <div class="controls">
+    <table id="param-table">
+      <tr>
+        <td>
+          <label for="modFreqSlider">frequency</label>
+          <input  id="modFreqSlider" 
+                  name="cfSlider" 
+                  type="range"
+                  min="1" max="4096" step="0.5" value="4.1"
+                  autocomplete="off" 
+                  oninput="mfOutput.value = modFreqSlider.value">
+          <output id="mfOutput" class="output">4.1</output>
+        </td>
+        <td>
+          <label for="mdSlider">depth</label>
+          <input  id="mdSlider" 
+                  name="qSlider" 
+                  min="0" max="1" step="0.01" value="0.02"
+                  type="range" autocomplete="off"
+                  oninput="mdOutput.value = mdSlider.value">
+          <output id="mdOutput" class="output">0.02</output>
+        </td>
+        <td>
+          <label for="cfSlider">center frequency</label>
+          <input  id="cfSlider" 
+                  name="cfSlider" 
+                  min="256" max="4096" step="0.5" value="512" 
+                  type="range"
+                  autocomplete="off" 
+                  oninput="cfOutput.value = cfSlider.value">
+          <output id="cfOutput" class="output">512</output>
+        </td>
+        <td>
+          <label for="qSlider">resonance</label>
+          <input  id="qSlider" 
+                  name="qSlider" 
+                  min="0" max="40" step="0.5" value="2" 
+                  type="range" 
+                  autocomplete="off"
+                  oninput="qOutput.value = qSlider.value">
+          <output id="qOutput" class="output">2</output>
+        </td>
+      </tr>
+    </table>
+    &nbsp;&nbsp;<button onclick="turnOn()" type="button">toggle sound</button>
+    &nbsp;&nbsp;<button onclick="randomize()">randomize</button>
+  </div>
+</body>
+
+<script src="./rapidlib.js">
+</script>
+
+<script>
+  /////////////////////////////////////////////////////MaxiLib
+
+  let maxiAudio = new maximJs.maxiAudio();
+  let myWave = new maximJs.maxiOsc();
+  let myLFO01 = new maximJs.maxiOsc();
+  let myFilter = new maximJs.maxiFilter();
+
+  let mfSlider = document.getElementById("modFreqSlider");
+  let mfOutput = document.getElementById("mfOutput");
+  let mdSlider = document.getElementById("mdSlider");
+  let mdOutput = document.getElementById("mdOutput");
+  let cfSlider = document.getElementById("cfSlider");
+  let cfOutput = document.getElementById("cfOutput");
+  let qSlider = document.getElementById("qSlider");
+  let qOutput = document.getElementById("qOutput");
+
+  let onOff = -1;
+
+
+  maxiAudio.play = function () {
+    let LFO01 = ((myLFO01.sinewave(parseFloat(mfSlider.value)) + 1.0) / 2.0) * (mdSlider.value) + (1 - mdSlider
+      .value);
+    let oscOutput = myWave.pulse(83, LFO01);
+    let cFreq = parseFloat(cfSlider.value);
+    let res = parseFloat(qSlider.value);
+    let myFilteredOutput = myFilter.lores(oscOutput, cFreq, res);
+    this.output = myFilteredOutput * onOff;
+  };
+
+  function turnOn() {
+    if (onOff == -1) {
+      maxiAudio.init();
+      onOff = 1;
+    } else {
+      onOff = !onOff;
+    }
+  }
+
+  //////////////////////////////////////////////////////////////RapidLib
+
+  let rapidMix = window.RapidLib();
+  let myRegression = new rapidMix.Regression();
+  let myTrainingSet = [];
+
+  function process(input) {
+    let regressionOutput = myRegression.process(input);
+    mfSlider.value = regressionOutput[0];
+    mdSlider.value = regressionOutput[1];
+    cfSlider.value = regressionOutput[2];
+    qSlider.value = regressionOutput[3];
+    updateOutputs();
+  }
+
+  ///////////////////////////////////////////////////CONTROLS AND INPUT
+
+  let mouseX;
+  let mouseY;
+  let recordState; //recording or not
+  let runState; //running or not
+
+  let canvas = document.querySelector("canvas");
+  canvas.width = 600;
+  canvas.height = 200;
+  let context = canvas.getContext("2d");
+  canvas.addEventListener('mousemove', getMouse, false);
+  canvas.addEventListener('mousedown', startRecording, false);
+  canvas.addEventListener('mouseup', stopRecording, false);
+
+  function getMouse(mousePosition) {
+    if (mousePosition.layerX || mousePosition.layerX === 0) {
+      mouseX = mousePosition.layerX;
+      mouseY = mousePosition.layerY;
+    } else if (mousePosition.offsetX || mousePosition.offsetX === 0) {
+      mouseX = mousePosition.offsetX;
+      mouseY = mousePosition.offsetY;
+    }
+
+    if (recordState) {
+      let rapidInput = [mouseX, mouseY];
+      let rapidOutput = [(modFreqSlider.value), (mdSlider.value), (cfSlider.value), (qSlider.value)];
+      myTrainingSet.push({
+        input: rapidInput,
+        output: rapidOutput
+      });
+
+    }
+
+    if (runState) {
+      process([mouseX, mouseY]);
+    }
+  }
+
+  function startRecording() {
+    if (!runState) {
+      console.warn("recording!");
+      parent.postMessage(["console", JSON.stringify("recording!")], "*");
+      recordState = 1;
+    }
+  }
+
+  function stopRecording() {
+    if (recordState) {
+      console.log("stopped recording");
+      parent.postMessage(["console", JSON.stringify("stopped recording")], "*");
+      recordState = 0;
+    }
+
+  }
+
+  window.addEventListener('keydown', this.check, false);
+
+  function check(e) {
+    //console.log(e.keyCode);
+    switch (e.keyCode) {
+      case 82: //r
+        runState = !runState;
+        break;
+      case 88: //x 
+        myTrainingSet = [];
+        runState = 0;
+        myRegression.reset();
+        break;
+      case 84: //t
+        runState = myRegression.train(myTrainingSet);
+        console.log('regression trained: ', runState);
+        parent.postMessage(["console", JSON.stringify('regression trained: '), JSON.stringify(runState)], "*");
+        break;
+    }
+  }
+
+  function randomize() {
+    mfSlider.value = 4096 * Math.random();
+    mdSlider.value = 1.0 * Math.random();
+    cfSlider.value = 4096 * Math.random();
+    qSlider.value = 40 * Math.random();
+    updateOutputs();
+  }
+
+  function updateOutputs() {
+    mfOutput.value = modFreqSlider.value;
+    mdOutput.value = mdSlider.value;
+    cfOutput.value = cfSlider.value;
+    qOutput.value = qSlider.value;
+  }
+
+  ////////////////////////////////////////////////////////////////Drawing
+
+  function draw() {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    //record state
+    context.fillStyle = "#FFFFFF";
+
+    context.font = "22px Lato";
+    if (recordState) {
+      context.fillStyle = "#FF9d75";
+      context.fillText('(' + modFreqSlider.value + ', ' + mdSlider.value + ', ' + cfSlider.value + ', ' + qSlider
+        .value + ')' + '    RECORDED ' + myTrainingSet.length + ' EXAMPLES   ', 120, canvas.height - 10);
+      // context.fillText(, 500, canvas.height - 10);
+    }
+
+    if (runState) {
+      context.fillStyle = "#18db5c";
+      context.fillText('RUNNING!', 120, canvas.height - 10);
+    }
+
+    context.fillText('(' + mouseX + ', ' + mouseY + ')', 10, canvas.height - 10);
+
+    window.requestAnimationFrame(draw);
+  }
+  window.requestAnimationFrame(draw);
+
+</script>
+
+</html>
